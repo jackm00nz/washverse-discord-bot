@@ -1,339 +1,337 @@
 import Database from "better-sqlite3"
 import { fileURLToPath } from "url"
 import { dirname, join } from "path"
+import { mkdirSync, existsSync } from "fs"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// Initialize database
-const dbPath = process.env.DATABASE_PATH || join(__dirname, "../../data/washverse.db")
-const db = new Database(dbPath)
+const dataDir = join(__dirname, "../../data")
+if (!existsSync(dataDir)) {
+  mkdirSync(dataDir, { recursive: true })
+}
 
-// Enable foreign keys
-db.pragma("foreign_keys = ON")
+const dbPath = process.env.DATABASE_PATH || join(dataDir, "bot.db")
+
+// Initialize database
+const db = new Database(dbPath)
+db.pragma("journal_mode = WAL")
+
+// Initialize database schema
+const initSchema = () => {
+  // Moderation logs table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mod_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      moderator_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      reason TEXT,
+      timestamp INTEGER NOT NULL
+    )
+  `)
+
+  // Warnings table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS warnings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      moderator_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      timestamp INTEGER NOT NULL
+    )
+  `)
+
+  // Suggestions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      suggestion TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      message_id TEXT,
+      timestamp INTEGER NOT NULL
+    )
+  `)
+
+  // Activity tracking table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      roblox_username TEXT,
+      sessions_attended INTEGER DEFAULT 0,
+      sessions_hosted INTEGER DEFAULT 0,
+      minutes INTEGER DEFAULT 0,
+      messages INTEGER DEFAULT 0,
+      last_updated INTEGER NOT NULL
+    )
+  `)
+
+  // Activity requirements table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_requirements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rank_name TEXT NOT NULL UNIQUE,
+      sessions_required INTEGER DEFAULT 0,
+      minutes_required INTEGER DEFAULT 0,
+      messages_required INTEGER DEFAULT 0
+    )
+  `)
+
+  // Leave of Absence table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS loa (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      roblox_username TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      start_date INTEGER NOT NULL,
+      end_date INTEGER NOT NULL,
+      status TEXT DEFAULT 'active'
+    )
+  `)
+
+  // Alliances table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS alliances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_name TEXT NOT NULL,
+      group_id TEXT NOT NULL,
+      representative_id TEXT,
+      channel_id TEXT,
+      last_checkin INTEGER,
+      created_at INTEGER NOT NULL
+    )
+  `)
+
+  // Session logs table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      host_id TEXT NOT NULL,
+      session_type TEXT NOT NULL,
+      attendees TEXT,
+      timestamp INTEGER NOT NULL
+    )
+  `)
+
+  // Tickets table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      claimed_by TEXT,
+      status TEXT DEFAULT 'open',
+      created_at INTEGER NOT NULL,
+      closed_at INTEGER
+    )
+  `)
+
+  // Game bans table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS game_bans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      roblox_user_id TEXT NOT NULL,
+      roblox_username TEXT NOT NULL,
+      moderator_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      ban_type TEXT NOT NULL,
+      expires_at INTEGER,
+      created_at INTEGER NOT NULL
+    )
+  `)
+}
+
+// Initialize schema on startup
+initSchema()
 
 // Database utility functions
 export const dbUtils = {
-  // Initialize all tables
-  initializeTables() {
-    // Moderation logs table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS mod_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        moderator_id TEXT NOT NULL,
-        action TEXT NOT NULL,
-        reason TEXT,
-        duration INTEGER,
-        created_at INTEGER NOT NULL
-      )
-    `)
-
-    // Warnings table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS warnings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        moderator_id TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      )
-    `)
-
-    // Suggestions table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS suggestions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        suggestion TEXT NOT NULL,
-        status TEXT DEFAULT 'pending',
-        reviewed_by TEXT,
-        response TEXT,
-        created_at INTEGER NOT NULL
-      )
-    `)
-
-    // Activity tracking table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS activity (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        roblox_username TEXT,
-        sessions_attended INTEGER DEFAULT 0,
-        sessions_hosted INTEGER DEFAULT 0,
-        minutes INTEGER DEFAULT 0,
-        messages INTEGER DEFAULT 0,
-        last_updated INTEGER NOT NULL
-      )
-    `)
-
-    // Activity requirements table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS activity_requirements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        rank_name TEXT NOT NULL UNIQUE,
-        sessions_required INTEGER DEFAULT 0,
-        minutes_required INTEGER DEFAULT 0,
-        messages_required INTEGER DEFAULT 0
-      )
-    `)
-
-    // Leave of Absence table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS loa (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        roblox_username TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        start_date INTEGER NOT NULL,
-        end_date INTEGER NOT NULL,
-        status TEXT DEFAULT 'active',
-        created_at INTEGER NOT NULL
-      )
-    `)
-
-    // Alliances table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS alliances (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        group_name TEXT NOT NULL,
-        group_id TEXT NOT NULL,
-        representative_id TEXT,
-        channel_id TEXT,
-        last_checkin INTEGER,
-        created_at INTEGER NOT NULL
-      )
-    `)
-
-    // Session logs table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS session_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        host_id TEXT NOT NULL,
-        session_type TEXT NOT NULL,
-        attendees TEXT,
-        duration INTEGER,
-        created_at INTEGER NOT NULL
-      )
-    `)
-
-    // Tickets table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS tickets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ticket_number INTEGER NOT NULL,
-        user_id TEXT NOT NULL,
-        channel_id TEXT NOT NULL,
-        claimed_by TEXT,
-        status TEXT DEFAULT 'open',
-        created_at INTEGER NOT NULL,
-        closed_at INTEGER
-      )
-    `)
-
-    // Game bans table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS game_bans (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        roblox_username TEXT NOT NULL,
-        roblox_id TEXT NOT NULL,
-        moderator_id TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        ban_type TEXT NOT NULL,
-        duration INTEGER,
-        expires_at INTEGER,
-        created_at INTEGER NOT NULL
-      )
-    `)
-
-    console.log("[v0] Database tables initialized successfully")
-  },
-
-  // Generic query functions
-  run(sql, params = []) {
-    return db.prepare(sql).run(params)
-  },
-
-  get(sql, params = []) {
-    return db.prepare(sql).get(params)
-  },
-
-  all(sql, params = []) {
-    return db.prepare(sql).all(params)
-  },
-
-  // Moderation functions
-  logModAction(userId, moderatorId, action, reason, duration = null) {
-    return this.run(
-      "INSERT INTO mod_logs (user_id, moderator_id, action, reason, duration, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [userId, moderatorId, action, reason, duration, Date.now()],
+  // Moderation logs
+  addModLog: (userId, moderatorId, action, reason) => {
+    const stmt = db.prepare(
+      "INSERT INTO mod_logs (user_id, moderator_id, action, reason, timestamp) VALUES (?, ?, ?, ?, ?)",
     )
+    return stmt.run(userId, moderatorId, action, reason, Date.now())
   },
 
-  addWarning(userId, moderatorId, reason) {
-    return this.run("INSERT INTO warnings (user_id, moderator_id, reason, created_at) VALUES (?, ?, ?, ?)", [
-      userId,
-      moderatorId,
-      reason,
-      Date.now(),
-    ])
+  getModLogs: (userId, limit = 10) => {
+    const stmt = db.prepare("SELECT * FROM mod_logs WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?")
+    return stmt.all(userId, limit)
   },
 
-  getWarnings(userId) {
-    return this.all("SELECT * FROM warnings WHERE user_id = ? ORDER BY created_at DESC", [userId])
+  // Warnings
+  addWarning: (userId, moderatorId, reason) => {
+    const stmt = db.prepare("INSERT INTO warnings (user_id, moderator_id, reason, timestamp) VALUES (?, ?, ?, ?)")
+    return stmt.run(userId, moderatorId, reason, Date.now())
   },
 
-  // Suggestion functions
-  createSuggestion(userId, suggestion) {
-    return this.run("INSERT INTO suggestions (user_id, suggestion, created_at) VALUES (?, ?, ?)", [
-      userId,
-      suggestion,
-      Date.now(),
-    ])
+  getWarnings: (userId) => {
+    const stmt = db.prepare("SELECT * FROM warnings WHERE user_id = ? ORDER BY timestamp DESC")
+    return stmt.all(userId)
   },
 
-  updateSuggestion(id, status, reviewedBy, response) {
-    return this.run("UPDATE suggestions SET status = ?, reviewed_by = ?, response = ? WHERE id = ?", [
-      status,
-      reviewedBy,
-      response,
-      id,
-    ])
+  // Suggestions
+  addSuggestion: (userId, suggestion, messageId) => {
+    const stmt = db.prepare("INSERT INTO suggestions (user_id, suggestion, message_id, timestamp) VALUES (?, ?, ?, ?)")
+    return stmt.run(userId, suggestion, messageId, Date.now())
   },
 
-  // Activity functions
-  getActivity(userId) {
-    return this.get("SELECT * FROM activity WHERE user_id = ?", [userId])
+  updateSuggestionStatus: (messageId, status) => {
+    const stmt = db.prepare("UPDATE suggestions SET status = ? WHERE message_id = ?")
+    return stmt.run(status, messageId)
   },
 
-  updateActivity(userId, robloxUsername, data) {
-    const existing = this.getActivity(userId)
+  // Activity tracking
+  getActivity: (userId) => {
+    const stmt = db.prepare("SELECT * FROM activity WHERE user_id = ?")
+    return stmt.get(userId)
+  },
+
+  updateActivity: (userId, robloxUsername, data) => {
+    const existing = dbUtils.getActivity(userId)
     if (existing) {
-      return this.run(
-        "UPDATE activity SET sessions_attended = ?, sessions_hosted = ?, minutes = ?, messages = ?, last_updated = ? WHERE user_id = ?",
-        [data.sessions_attended, data.sessions_hosted, data.minutes, data.messages, Date.now(), userId],
+      const stmt = db.prepare(`
+        UPDATE activity 
+        SET sessions_attended = ?, sessions_hosted = ?, minutes = ?, messages = ?, last_updated = ?
+        WHERE user_id = ?
+      `)
+      return stmt.run(
+        data.sessions_attended || existing.sessions_attended,
+        data.sessions_hosted || existing.sessions_hosted,
+        data.minutes || existing.minutes,
+        data.messages || existing.messages,
+        Date.now(),
+        userId,
       )
     } else {
-      return this.run(
-        "INSERT INTO activity (user_id, roblox_username, sessions_attended, sessions_hosted, minutes, messages, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [userId, robloxUsername, data.sessions_attended, data.sessions_hosted, data.minutes, data.messages, Date.now()],
+      const stmt = db.prepare(`
+        INSERT INTO activity (user_id, roblox_username, sessions_attended, sessions_hosted, minutes, messages, last_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+      return stmt.run(
+        userId,
+        robloxUsername,
+        data.sessions_attended || 0,
+        data.sessions_hosted || 0,
+        data.minutes || 0,
+        data.messages || 0,
+        Date.now(),
       )
     }
   },
 
-  getAllActivity() {
-    return this.all("SELECT * FROM activity")
+  // Activity requirements
+  setRequirement: (rankName, requirements) => {
+    const stmt = db.prepare(`
+      INSERT INTO activity_requirements (rank_name, sessions_required, minutes_required, messages_required)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(rank_name) DO UPDATE SET
+        sessions_required = excluded.sessions_required,
+        minutes_required = excluded.minutes_required,
+        messages_required = excluded.messages_required
+    `)
+    return stmt.run(rankName, requirements.sessions || 0, requirements.minutes || 0, requirements.messages || 0)
   },
 
-  // Activity requirements functions
-  getRequirement(rankName) {
-    return this.get("SELECT * FROM activity_requirements WHERE rank_name = ?", [rankName])
+  getRequirement: (rankName) => {
+    const stmt = db.prepare("SELECT * FROM activity_requirements WHERE rank_name = ?")
+    return stmt.get(rankName)
   },
 
-  setRequirement(rankName, sessions, minutes, messages) {
-    const existing = this.getRequirement(rankName)
-    if (existing) {
-      return this.run(
-        "UPDATE activity_requirements SET sessions_required = ?, minutes_required = ?, messages_required = ? WHERE rank_name = ?",
-        [sessions, minutes, messages, rankName],
-      )
-    } else {
-      return this.run(
-        "INSERT INTO activity_requirements (rank_name, sessions_required, minutes_required, messages_required) VALUES (?, ?, ?, ?)",
-        [rankName, sessions, minutes, messages],
-      )
-    }
-  },
-
-  // LoA functions
-  createLoA(userId, robloxUsername, reason, startDate, endDate) {
-    return this.run(
-      "INSERT INTO loa (user_id, roblox_username, reason, start_date, end_date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [userId, robloxUsername, reason, startDate, endDate, Date.now()],
+  // Leave of Absence
+  addLoa: (userId, robloxUsername, reason, startDate, endDate) => {
+    const stmt = db.prepare(
+      "INSERT INTO loa (user_id, roblox_username, reason, start_date, end_date) VALUES (?, ?, ?, ?, ?)",
     )
+    return stmt.run(userId, robloxUsername, reason, startDate, endDate)
   },
 
-  getActiveLoAs() {
-    return this.all("SELECT * FROM loa WHERE status = ? AND end_date > ?", ["active", Date.now()])
+  getActiveLoas: () => {
+    const stmt = db.prepare("SELECT * FROM loa WHERE status = ? AND end_date > ?")
+    return stmt.all("active", Date.now())
   },
 
-  expireLoA(id) {
-    return this.run("UPDATE loa SET status = ? WHERE id = ?", ["expired", id])
+  expireLoa: (id) => {
+    const stmt = db.prepare("UPDATE loa SET status = ? WHERE id = ?")
+    return stmt.run("expired", id)
   },
 
-  // Alliance functions
-  createAlliance(groupName, groupId, representativeId, channelId) {
-    return this.run(
-      "INSERT INTO alliances (group_name, group_id, representative_id, channel_id, created_at) VALUES (?, ?, ?, ?, ?)",
-      [groupName, groupId, representativeId, channelId, Date.now()],
+  // Alliances
+  addAlliance: (groupName, groupId, channelId) => {
+    const stmt = db.prepare("INSERT INTO alliances (group_name, group_id, channel_id, created_at) VALUES (?, ?, ?, ?)")
+    return stmt.run(groupName, groupId, channelId, Date.now())
+  },
+
+  getAlliances: () => {
+    const stmt = db.prepare("SELECT * FROM alliances ORDER BY group_name")
+    return stmt.all()
+  },
+
+  updateAllianceRep: (groupId, representativeId) => {
+    const stmt = db.prepare("UPDATE alliances SET representative_id = ? WHERE group_id = ?")
+    return stmt.run(representativeId, groupId)
+  },
+
+  updateAllianceCheckin: (groupId) => {
+    const stmt = db.prepare("UPDATE alliances SET last_checkin = ? WHERE group_id = ?")
+    return stmt.run(Date.now(), groupId)
+  },
+
+  // Session logs
+  addSessionLog: (hostId, sessionType, attendees) => {
+    const stmt = db.prepare(
+      "INSERT INTO session_logs (host_id, session_type, attendees, timestamp) VALUES (?, ?, ?, ?)",
     )
+    return stmt.run(hostId, sessionType, JSON.stringify(attendees), Date.now())
   },
 
-  getAllAlliances() {
-    return this.all("SELECT * FROM alliances")
+  // Tickets
+  createTicket: (userId, channelId) => {
+    const stmt = db.prepare("INSERT INTO tickets (user_id, channel_id, created_at) VALUES (?, ?, ?)")
+    return stmt.run(userId, channelId, Date.now())
   },
 
-  updateAllianceRep(id, representativeId) {
-    return this.run("UPDATE alliances SET representative_id = ? WHERE id = ?", [representativeId, id])
+  claimTicket: (channelId, claimedBy) => {
+    const stmt = db.prepare("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?")
+    return stmt.run(claimedBy, channelId)
   },
 
-  updateAllianceCheckin(id) {
-    return this.run("UPDATE alliances SET last_checkin = ? WHERE id = ?", [Date.now(), id])
+  closeTicket: (channelId) => {
+    const stmt = db.prepare("UPDATE tickets SET status = ?, closed_at = ? WHERE channel_id = ?")
+    return stmt.run("closed", Date.now(), channelId)
   },
 
-  // Ticket functions
-  createTicket(ticketNumber, userId, channelId) {
-    return this.run("INSERT INTO tickets (ticket_number, user_id, channel_id, created_at) VALUES (?, ?, ?, ?)", [
-      ticketNumber,
-      userId,
-      channelId,
-      Date.now(),
-    ])
+  getTicket: (channelId) => {
+    const stmt = db.prepare("SELECT * FROM tickets WHERE channel_id = ?")
+    return stmt.get(channelId)
   },
 
-  getTicket(channelId) {
-    return this.get("SELECT * FROM tickets WHERE channel_id = ? AND status = ?", [channelId, "open"])
+  // Game bans
+  addGameBan: (robloxUserId, robloxUsername, moderatorId, reason, banType, expiresAt = null) => {
+    const stmt = db.prepare(`
+      INSERT INTO game_bans (roblox_user_id, roblox_username, moderator_id, reason, ban_type, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    return stmt.run(robloxUserId, robloxUsername, moderatorId, reason, banType, expiresAt, Date.now())
   },
 
-  claimTicket(channelId, claimedBy) {
-    return this.run("UPDATE tickets SET claimed_by = ? WHERE channel_id = ?", [claimedBy, channelId])
+  removeGameBan: (robloxUserId) => {
+    const stmt = db.prepare("DELETE FROM game_bans WHERE roblox_user_id = ?")
+    return stmt.run(robloxUserId)
   },
 
-  closeTicket(channelId) {
-    return this.run("UPDATE tickets SET status = ?, closed_at = ? WHERE channel_id = ?", [
-      "closed",
-      Date.now(),
-      channelId,
-    ])
+  getGameBan: (robloxUserId) => {
+    const stmt = db.prepare("SELECT * FROM game_bans WHERE roblox_user_id = ?")
+    return stmt.get(robloxUserId)
   },
 
-  // Game ban functions
-  createGameBan(userId, robloxUsername, robloxId, moderatorId, reason, banType, duration = null) {
-    const expiresAt = duration ? Date.now() + duration : null
-    return this.run(
-      "INSERT INTO game_bans (user_id, roblox_username, roblox_id, moderator_id, reason, ban_type, duration, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [userId, robloxUsername, robloxId, moderatorId, reason, banType, duration, expiresAt, Date.now()],
-    )
-  },
-
-  getGameBan(robloxId) {
-    return this.get("SELECT * FROM game_bans WHERE roblox_id = ? AND (expires_at IS NULL OR expires_at > ?)", [
-      robloxId,
-      Date.now(),
-    ])
-  },
-
-  removeGameBan(robloxId) {
-    return this.run("DELETE FROM game_bans WHERE roblox_id = ?", [robloxId])
-  },
-
-  close() {
-    db.close()
+  getActiveGameBans: () => {
+    const stmt = db.prepare("SELECT * FROM game_bans WHERE expires_at IS NULL OR expires_at > ?")
+    return stmt.all(Date.now())
   },
 }
-
-// Initialize tables on import
-dbUtils.initializeTables()
 
 export default db
