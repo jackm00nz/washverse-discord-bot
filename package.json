@@ -1,18 +1,18 @@
 {
   "name": "washverse-discord-bot",
   "version": "1.0.0",
-  "description": "Discord bot for WashVerse community",
+  "description": "Discord bot for WashVerse ROBLOX car wash group",
   "keywords": [
     "discord",
     "bot",
-    "washverse"
+    "washverse",
+    "roblox"
   ],
   "license": "MIT",
   "author": "WashVerse",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "bot": "node src/index.js",
     "build": "next build",
     "deploy": "node src/deploy-commands.js",
     "dev": "node --watch src/index.js",
