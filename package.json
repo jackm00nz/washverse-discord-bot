@@ -13,13 +13,12 @@
   "main": "src/index.js",
   "scripts": {
     "bot": "node src/index.js",
-    "build": "next build",
+    "build": "echo 'No build step needed for Discord bot'",
     "dev": "node --watch src/index.js",
-    "next:dev": "next dev",
-    "next:start": "next start",
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.9",
     "@vercel/analytics": "latest",
     "axios": "latest",
     "better-sqlite3": "latest",
